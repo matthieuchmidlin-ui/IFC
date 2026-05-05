@@ -846,6 +846,16 @@ Cordialement,
         </div>
         <div class="fg"><label>Token GitHub (Personal Access Token)</label><input id="gist-token" type="password" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" oninput="saveGistConfig()"></div>
         <div class="fg"><label>ID du Gist (rempli automatiquement)</label><input id="gist-id" placeholder="Créé lors de la 1ère sync" oninput="saveGistConfig()"></div>
+        <div class="fg" style="margin-top:16px;padding-top:16px;border-top:1px solid var(--color-border)">
+          <label style="display:flex;align-items:center;gap:8px">
+            <span style="width:20px;height:20px;background:#0f9d58;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700">G</span>
+            Google Sheets — Miroir en lecture (optionnel)
+          </label>
+          <input id="sheets-url" type="text" placeholder="URL de votre Google Apps Script Web App" oninput="saveSheetsUrl()" style="margin-top:6px;width:100%;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:monospace;font-size:11px;padding:8px 10px;outline:none">
+          <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:5px">
+            Après chaque sync GitHub, les données sont aussi copiées dans votre Google Sheet. Voir le script <code>infocom-sync.gs</code> à déployer sur <a href="https://script.google.com" target="_blank" style="color:var(--color-action-primary)">script.google.com</a>
+          </div>
+        </div>
         <div style="display:flex;gap:8px">
           <button class="btn bp" style="flex:1;justify-content:center" onclick="gistSync()">☁️ Synchroniser</button>
           <button class="btn bg" style="flex:1;justify-content:center" onclick="clearGistConfig()">✕ Effacer</button>
@@ -2383,7 +2393,8 @@ function toast(msg,type){var t=document.createElement('div');t.className='toast'
 
 // GITHUB GIST SYNC
 function saveGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)setProfileToken(currentPid,t.value.trim());if(i)setProfileGistId(currentPid,i.value.trim());}
-function loadGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)t.value=profileToken(currentPid)||'';if(i)i.value=profileGistId(currentPid)||'';}
+function loadGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)t.value=profileToken(currentPid)||'';if(i)i.value=profileGistId(currentPid)||'';var su=document.getElementById('sheets-url');if(su)su.value=localStorage.getItem('sheets_url_'+currentPid)||'';}
+function saveSheetsUrl(){var su=document.getElementById('sheets-url');if(su)localStorage.setItem('sheets_url_'+currentPid,su.value.trim());}
 function clearGistConfig(){['gist_token_'+currentPid,'gist_id_'+currentPid,'gist_sync_'+currentPid].forEach(function(k){localStorage.removeItem(k);});loadGistConfig();setSyncStatus('⚙️','Non configuré','Entrez votre token GitHub ci-dessous',false);toast('Configuration effacée','info');}
 function setSyncStatus(ico,title,sub,spin){var i=document.getElementById('sync-ico'),t=document.getElementById('sync-title'),s=document.getElementById('sync-sub'),sp=document.getElementById('sync-spin');if(i)i.textContent=ico;if(t)t.textContent=title;if(s)s.textContent=sub;if(sp)sp.style.display=spin?'block':'none';}
 async function gistSync(){
@@ -2475,12 +2486,44 @@ async function gistSync(){
     setProfileLastSync(currentPid,new Date().toISOString());
     setSyncStatus('✅','Synchronisé ✓','Dernière sync : '+new Date().toLocaleTimeString('fr-FR'),false);
     toast('✓ Sauvegarde sur GitHub Gist','ok');
+    // Miroir Google Sheets si configuré
+    var sheetsUrl=localStorage.getItem('sheets_url_'+currentPid);
+    if(sheetsUrl)syncToSheets(sheetsUrl);
 
   }catch(e){
     setSyncStatus('❌','Erreur de synchronisation',e.message,false);
     toast('Sync echouee : '+e.message,'err');
   }
   gistSyncing=false;
+}
+
+async function syncToSheets(url){
+  try{
+    // Enrichir les companies avec le nom du dossier
+    var enriched=(S.companies||[]).map(function(c){
+      var folder=S.folders.find(function(f){return f.id===c.folderId;});
+      var calls=S.calls.filter(function(cl){return cl.companyId===c.id;});
+      var last=calls.sort(function(a,b){return(b.date||'').localeCompare(a.date||'');})[0];
+      return Object.assign({},c,{
+        folderName:folder?folder.name:'',
+        lastStatus:last?last.status:'',
+        lastFollowup:last&&last.followup?last.followup:''
+      });
+    });
+    await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        action:'sync',
+        companies:enriched,
+        calls:S.calls||[],
+        rdvs:S.rdvs||[]
+      })
+    });
+    console.log('✓ Sheets mirror OK');
+  }catch(e){
+    console.warn('Sheets mirror failed:',e.message);
+  }
 }
 setInterval(function(){if(profileToken(currentPid)&&!gistSyncing&&document.visibilityState!=='hidden')gistSync();},5*60*1000);
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible'&&profileToken(currentPid))setTimeout(gistSync,1000);});
