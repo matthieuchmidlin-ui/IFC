@@ -852,6 +852,7 @@ Cordialement,
             Google Sheets — Miroir en lecture (optionnel)
           </label>
           <input id="sheets-url" type="text" placeholder="URL de votre Google Apps Script Web App" oninput="saveSheetsUrl()" style="margin-top:6px;width:100%;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:monospace;font-size:11px;padding:8px 10px;outline:none">
+          <input id="sheets-token" type="text" placeholder="Token secret (ex: infocom2024matthieu)" oninput="saveSheetsUrl()" style="margin-top:6px;width:100%;background:var(--color-bg);border:1px solid var(--color-border);border-radius:var(--radius-sm);color:var(--color-text-primary);font-family:monospace;font-size:11px;padding:8px 10px;outline:none">
           <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:5px">
             Après chaque sync GitHub, les données sont aussi copiées dans votre Google Sheet. Voir le script <code>infocom-sync.gs</code> à déployer sur <a href="https://script.google.com" target="_blank" style="color:var(--color-action-primary)">script.google.com</a>
           </div>
@@ -2393,8 +2394,19 @@ function toast(msg,type){var t=document.createElement('div');t.className='toast'
 
 // GITHUB GIST SYNC
 function saveGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)setProfileToken(currentPid,t.value.trim());if(i)setProfileGistId(currentPid,i.value.trim());}
-function loadGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)t.value=profileToken(currentPid)||'';if(i)i.value=profileGistId(currentPid)||'';var su=document.getElementById('sheets-url');if(su)su.value=localStorage.getItem('sheets_url_'+currentPid)||'';}
-function saveSheetsUrl(){var su=document.getElementById('sheets-url');if(su)localStorage.setItem('sheets_url_'+currentPid,su.value.trim());}
+function loadGistConfig(){var t=document.getElementById('gist-token'),i=document.getElementById('gist-id');if(t)t.value=profileToken(currentPid)||'';if(i)i.value=profileGistId(currentPid)||'';var su=document.getElementById('sheets-url');if(su)su.value=localStorage.getItem('sheets_url_'+currentPid)||'';var st=document.getElementById('sheets-token');if(st)st.value=localStorage.getItem('sheets_token_'+currentPid)||'';}
+function saveSheetsUrl(){
+  var su=document.getElementById('sheets-url');
+  var st=document.getElementById('sheets-token');
+  if(su)localStorage.setItem('sheets_url_'+currentPid,su.value.trim());
+  if(st)localStorage.setItem('sheets_token_'+currentPid,st.value.trim());
+}
+function loadSheetsConfig(){
+  var su=document.getElementById('sheets-url');
+  var st=document.getElementById('sheets-token');
+  if(su)su.value=localStorage.getItem('sheets_url_'+currentPid)||'';
+  if(st)st.value=localStorage.getItem('sheets_token_'+currentPid)||'';
+}
 function clearGistConfig(){['gist_token_'+currentPid,'gist_id_'+currentPid,'gist_sync_'+currentPid].forEach(function(k){localStorage.removeItem(k);});loadGistConfig();setSyncStatus('⚙️','Non configuré','Entrez votre token GitHub ci-dessous',false);toast('Configuration effacée','info');}
 function setSyncStatus(ico,title,sub,spin){var i=document.getElementById('sync-ico'),t=document.getElementById('sync-title'),s=document.getElementById('sync-sub'),sp=document.getElementById('sync-spin');if(i)i.textContent=ico;if(t)t.textContent=title;if(s)s.textContent=sub;if(sp)sp.style.display=spin?'block':'none';}
 async function gistSync(){
@@ -2499,7 +2511,6 @@ async function gistSync(){
 
 async function syncToSheets(url){
   try{
-    // Enrichir les companies avec le nom du dossier
     var enriched=(S.companies||[]).map(function(c){
       var folder=S.folders.find(function(f){return f.id===c.folderId;});
       var calls=S.calls.filter(function(cl){return cl.companyId===c.id;});
@@ -2510,15 +2521,13 @@ async function syncToSheets(url){
         lastFollowup:last&&last.followup?last.followup:''
       });
     });
-    await fetch(url,{
+    // Token ajouté dans l'URL pour sécuriser
+    var token=localStorage.getItem('sheets_token_'+currentPid)||'';
+    var fullUrl=url+(url.includes('?')?'&':'?')+'token='+encodeURIComponent(token);
+    await fetch(fullUrl,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        action:'sync',
-        companies:enriched,
-        calls:S.calls||[],
-        rdvs:S.rdvs||[]
-      })
+      body:JSON.stringify({action:'sync',companies:enriched,calls:S.calls||[],rdvs:S.rdvs||[]})
     });
     console.log('✓ Sheets mirror OK');
   }catch(e){
