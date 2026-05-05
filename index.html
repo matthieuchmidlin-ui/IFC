@@ -19,7 +19,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,700&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --tab-h:64px; /* recalculé dynamiquement par JS */
+  --tab-h:0px; /* mesuré dynamiquement - défaut 0 */
   /* ── BRAND ── */
   --brand-navy:#0f2044;
   --brand-blue:#1a3a7c;
@@ -121,7 +121,8 @@
   .topbar{background:#0d1117;box-shadow:0 1px 0 var(--color-border)}
   .more-menu-item:hover{background:var(--color-surface-raised) !important}
   :root{
-  --tab-h:64px; /* recalculé dynamiquement par JS */
+    --tab-h:0px;
+  --tab-h:0px; /* mesuré dynamiquement - défaut 0 */
     --color-bg:#0d1117;
     --color-surface:#161b22;
     --color-surface-raised:#1c2230;
@@ -1572,7 +1573,8 @@ function selectProfile(pid){
   // Afficher tab-bar sur mobile
   var tb=document.querySelector('.tab-bar');
   if(tb&&window.innerWidth<1024)tb.style.display='block';
-  setTimeout(measureTabBar,50);
+  // Mesurer après que le display:block soit appliqué
+  requestAnimationFrame(function(){requestAnimationFrame(measureTabBar);});
   renderProfileBadge();renderFolders();renderProspects();updateHdr();renderRelances();
   var lv=localStorage.getItem('last_view_'+pid);
   if(lv&&document.getElementById('view-'+lv))navTo(lv);else navTo('prospects');
@@ -2818,14 +2820,17 @@ initApp();
 // ══════════════════════════════════════════════════
 function measureTabBar(){
   var tb=document.querySelector('.tab-bar');
-  if(!tb||getComputedStyle(tb).display==='none'){
-    document.documentElement.style.setProperty('--tab-h','0px');
+  var root=document.documentElement;
+  if(!tb){root.style.setProperty('--tab-h','0px');return;}
+  // Vérifier si réellement visible (pas juste display:block mais aussi height > 0)
+  var cs=getComputedStyle(tb);
+  var rect=tb.getBoundingClientRect();
+  if(cs.display==='none'||rect.height===0){
+    root.style.setProperty('--tab-h','0px');
     return;
   }
-  var h=tb.getBoundingClientRect().height;
-  // Ajouter safe-area-inset-bottom si pas déjà inclus dans la hauteur
-  var sab=parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sab'))||0;
-  document.documentElement.style.setProperty('--tab-h',(h+4)+'px');
+  // Hauteur réelle + 4px de respiration
+  root.style.setProperty('--tab-h',Math.ceil(rect.height+4)+'px');
 }
 
 // Lancer au démarrage et à chaque resize
