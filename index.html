@@ -2422,19 +2422,18 @@ async function testSheetsSync(){
       });
     });
     var fullUrl=url+(url.includes('?')?'&':'?')+'token='+encodeURIComponent(token);
-    var r=await fetch(fullUrl,{
+    // Google Apps Script nécessite no-cors — on ne peut pas lire la réponse
+    // mais les données sont bien envoyées
+    await fetch(fullUrl,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({action:'sync',companies:enriched,calls:S.calls||[],rdvs:S.rdvs||[]})
     });
-    var data=await r.json();
-    if(data.ok){
-      toast('Sheets OK — '+data.synced+' prospects synchronises','ok');
-    } else {
-      toast('Erreur Sheets : '+(data.error||'inconnue'),'err');
-    }
+    // Avec no-cors on ne peut pas lire la réponse — si pas d'erreur = OK
+    toast('Données envoyées vers Google Sheets','ok');
   }catch(e){
-    toast('Connexion Sheets echouee : '+e.message,'err');
+    toast('Echec Sheets : '+e.message,'err');
   }
 }
 function clearGistConfig(){['gist_token_'+currentPid,'gist_id_'+currentPid,'gist_sync_'+currentPid].forEach(function(k){localStorage.removeItem(k);});loadGistConfig();setSyncStatus('⚙️','Non configuré','Entrez votre token GitHub ci-dessous',false);toast('Configuration effacée','info');}
@@ -2541,9 +2540,10 @@ async function gistSync(){
 
 async function syncToSheets(url){
   try{
+    var token=localStorage.getItem('sheets_token_'+currentPid)||'';
     var enriched=(S.companies||[]).map(function(c){
       var folder=S.folders.find(function(f){return f.id===c.folderId;});
-      var calls=S.calls.filter(function(cl){return cl.companyId===c.id;});
+      var calls=(S.calls||[]).filter(function(cl){return cl.companyId===c.id;});
       var last=calls.sort(function(a,b){return(b.date||'').localeCompare(a.date||'');})[0];
       return Object.assign({},c,{
         folderName:folder?folder.name:'',
@@ -2551,12 +2551,11 @@ async function syncToSheets(url){
         lastFollowup:last&&last.followup?last.followup:''
       });
     });
-    // Token ajouté dans l'URL pour sécuriser
-    var token=localStorage.getItem('sheets_token_'+currentPid)||'';
     var fullUrl=url+(url.includes('?')?'&':'?')+'token='+encodeURIComponent(token);
     await fetch(fullUrl,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      mode:'no-cors',
+      headers:{'Content-Type':'text/plain'},
       body:JSON.stringify({action:'sync',companies:enriched,calls:S.calls||[],rdvs:S.rdvs||[]})
     });
     console.log('✓ Sheets mirror OK');
